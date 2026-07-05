@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  
+  body {
+    @apply bg-[#f8fafc] text-[#0a0a0a] antialiased;
+  }
+  
+  /* Minimal scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-[#d1d5db] rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-[#9ca3af];
+  }
+}
+
+@layer components {
+  /* Buttons - Modern, minimal */
+  .btn-primary {
+    @apply px-4 py-2.5 bg-[#0a0a0a] text-white rounded-lg hover:bg-[#1a1a1a] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2.5 bg-[#f1f5f9] text-[#1a1a1a] rounded-lg hover:bg-[#e2e8f0] transition-all duration-200 text-sm font-medium;
+  }
+  
+  .btn-outline {
+    @apply px-4 py-2.5 border border-[#e2e8f0] text-[#1a1a1a] rounded-lg hover:bg-[#f8fafc] transition-all duration-200 text-sm font-medium;
+  }
+  
+  .btn-danger {
+    @apply px-4 py-2.5 bg-[#dc2626] text-white rounded-lg hover:bg-[#b91c1c] transition-all duration-200 text-sm font-medium;
+  }
+  
+  .btn-success {
+    @apply px-4 py-2.5 bg-[#16a34a] text-white rounded-lg hover:bg-[#15803d] transition-all duration-200 text-sm font-medium;
+  }
+
+  /* Cards - Clean, minimal */
+  .card {
+    @apply bg-white rounded-xl border border-[#eef2f6] p-6;
+  }
+  
+  .card-hover {
+    @apply hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition-shadow duration-200;
+  }
+
+  /* Form Inputs */
+  .input-field {
+    @apply w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/10 focus:border-[#0a0a0a] transition-all duration-200 text-sm;
+  }
+  
+  .input-field-error {
+    @apply border-[#dc2626] focus:ring-[#dc2626]/10 focus:border-[#dc2626];
+  }
+  
+  .label-field {
+    @apply block text-sm font-medium text-[#1a1a1a] mb-1.5;
+  }
+
+  /* Badges - Clean, minimal */
+  .badge {
+    @apply px-2.5 py-0.5 text-xs font-medium rounded-full;
+  }
+  
+  .badge-success {
+    @apply bg-[#dcfce7] text-[#166534];
+  }
+  
+  .badge-warning {
+    @apply bg-[#fef3c7] text-[#92400e];
+  }
+  
+  .badge-danger {
+    @apply bg-[#fee2e2] text-[#991b1b];
+  }
+  
+  .badge-info {
+    @apply bg-[#dbeafe] text-[#1e40af];
+  }
+  
+  .badge-gray {
+    @apply bg-[#f1f5f9] text-[#475569];
+  }
+}
