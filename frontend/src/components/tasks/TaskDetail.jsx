@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { format } from 'date-fns';
-import { formatUTCDate } from '../../utils/dateUtils';
-import { updateTask } from '../../store/slices/taskSlice';
+import { updateTask, deleteAttachment } from '../../store/slices/taskSlice';
 import {
   FaTimes,
   FaUser,
@@ -11,13 +10,15 @@ import {
   FaFlag,
   FaPaperclip,
   FaFilePdf,
-  FaFileImage,
   FaExternalLinkAlt,
   FaEdit,
-  FaTrash,
   FaClock,
   FaCheckCircle,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaImage,
+  FaFile,
+  FaTrash,
+  FaUpload
 } from 'react-icons/fa';
 
 const priorityColor = (priority) => ({
@@ -33,21 +34,41 @@ const statusColor = (status) => ({
   overdue: 'bg-[#fee2e2] text-[#991b1b]'
 }[status] || 'bg-[#f1f5f9] text-[#475569]');
 
+const formatLocalDate = (dateStr, formatStr = 'EEEE, MMMM d, yyyy') => {
+  if (!dateStr) return 'N/A';
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return format(date, formatStr);
+  }
+  return format(new Date(dateStr), formatStr);
+};
+
 const getFileExt = (filename = '') => filename.split('.').pop().toLowerCase();
-const isImageFile = (filename) => ['jpg', 'jpeg', 'png'].includes(getFileExt(filename));
+const isImageFile = (filename) => ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(getFileExt(filename));
+const isPDFFile = (filename) => getFileExt(filename) === 'pdf';
 
 const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
   const dispatch = useDispatch();
   const [status, setStatus] = useState(task.status);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingAttachment, setIsDeletingAttachment] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   const isOverdue = task.status !== 'completed' && new Date(task.dueDate) < new Date();
   const isOwnTask = task.assignedTo?.id === currentUserId || task.assignedToId === currentUserId;
   const canChangeStatus = userRole === 'employee' && isOwnTask && task.status !== 'completed';
+  const canManageAttachments = userRole === 'admin' || isOwnTask;
 
-  const fileUrl = task.fileAttachment
-    ? `${import.meta.env.VITE_API_URL}/uploads/${task.fileAttachment}`
-    : null;
+  const getFileUrl = () => {
+    if (!task.fileAttachment) return null;
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    return `${baseUrl}/uploads/${task.fileAttachment}`;
+  };
+
+  const fileUrl = getFileUrl();
 
   const handleStatusSave = async () => {
     if (status === task.status) return;
@@ -60,7 +81,47 @@ const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
     }
   };
 
-  // Get status icon
+  // ✅ NEW: Handle delete attachment
+  const handleDeleteAttachment = async () => {
+    if (!window.confirm('Are you sure you want to delete this attachment?')) return;
+    
+    setIsDeletingAttachment(true);
+    try {
+      const result = await dispatch(deleteAttachment(task.id));
+      if (deleteAttachment.fulfilled.match(result)) {
+        // Update the task in the UI
+        task.fileAttachment = null;
+        onClose();
+      }
+    } finally {
+      setIsDeletingAttachment(false);
+    }
+  };
+
+  // ✅ NEW: Handle replace/upload attachment
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      handleUploadAttachment(file);
+    }
+  };
+
+  const handleUploadAttachment = async (file) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('fileAttachment', file);
+      
+      // Use updateTask with just the file
+      await dispatch(updateTask({ id: task.id, data: { fileAttachment: file } }));
+      onClose();
+    } finally {
+      setIsUploading(false);
+      setSelectedFile(null);
+    }
+  };
+
   const getStatusIcon = (status) => {
     switch(status) {
       case 'pending': return <FaClock className="w-4 h-4" />;
@@ -68,6 +129,75 @@ const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
       case 'overdue': return <FaExclamationTriangle className="w-4 h-4" />;
       default: return <FaClock className="w-4 h-4" />;
     }
+  };
+
+  const renderFilePreview = () => {
+    if (!task.fileAttachment || !fileUrl) return null;
+
+    const fileExt = getFileExt(task.fileAttachment);
+
+    if (isImageFile(task.fileAttachment)) {
+      return (
+        <div className="bg-white rounded-lg border border-[#eef2f6] p-4 relative">
+          <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="block group">
+            <img
+              src={fileUrl}
+              alt="Task attachment"
+              className="w-full max-h-96 object-contain rounded-lg"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+            <span className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-[#0a0a0a] group-hover:text-[#2563eb] transition-colors">
+              <FaExternalLinkAlt className="w-3.5 h-3.5" />
+              Open full size
+            </span>
+          </a>
+        </div>
+      );
+    }
+
+    if (isPDFFile(task.fileAttachment)) {
+      return (
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-4 p-4 bg-white border border-[#eef2f6] rounded-lg hover:border-[#0a0a0a]/30 transition-colors"
+        >
+          <div className="p-3 bg-[#fee2e2] rounded-xl text-[#dc2626]">
+            <FaFilePdf className="w-6 h-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-[#0a0a0a] truncate">
+              {task.fileAttachment}
+            </p>
+            <p className="text-xs text-[#94a3b8]">Click to open PDF in new tab</p>
+          </div>
+          <FaExternalLinkAlt className="w-4 h-4 text-[#94a3b8] flex-shrink-0" />
+        </a>
+      );
+    }
+
+    return (
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-4 p-4 bg-white border border-[#eef2f6] rounded-lg hover:border-[#0a0a0a]/30 transition-colors"
+      >
+        <div className="p-3 bg-gray-100 rounded-xl text-gray-600">
+          <FaFile className="w-6 h-6" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[#0a0a0a] truncate">
+            {task.fileAttachment}
+          </p>
+          <p className="text-xs text-[#94a3b8]">Click to download</p>
+        </div>
+        <FaExternalLinkAlt className="w-4 h-4 text-[#94a3b8] flex-shrink-0" />
+      </a>
+    );
   };
 
   return (
@@ -165,7 +295,7 @@ const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
                   <span>Start Date</span>
                 </div>
                 <p className="text-base font-medium text-[#0a0a0a]">
-                  {formatUTCDate(task.startDate, 'EEEE, MMMM d, yyyy')}
+                  {formatLocalDate(task.startDate, 'EEEE, MMMM d, yyyy')}
                 </p>
               </div>
               <div className="bg-[#f8fafc] rounded-xl px-5 py-4">
@@ -174,7 +304,7 @@ const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
                   <span>Due Date</span>
                 </div>
                 <p className={`text-base font-medium ${isOverdue ? 'text-[#dc2626]' : 'text-[#0a0a0a]'}`}>
-                  {formatUTCDate(task.dueDate, 'EEEE, MMMM d, yyyy')}
+                  {formatLocalDate(task.dueDate, 'EEEE, MMMM d, yyyy')}
                   {isOverdue && (
                     <span className="ml-2 text-sm font-normal text-[#dc2626]">
                       (Overdue)
@@ -185,45 +315,66 @@ const TaskDetail = ({ task, userRole, currentUserId, onClose }) => {
             </div>
           </div>
 
-          {/* Attachment */}
+          {/* Attachment with Management */}
           {task.fileAttachment && (
             <div className="bg-[#f8fafc] rounded-xl p-6">
-              <h3 className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider mb-4">
-                Attachment
-              </h3>
-              {isImageFile(task.fileAttachment) ? (
-                <div className="bg-white rounded-lg border border-[#eef2f6] p-4">
-                  <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="block group">
-                    <img
-                      src={fileUrl}
-                      alt="Task attachment"
-                      className="w-full max-h-96 object-contain rounded-lg"
-                    />
-                    <span className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-[#0a0a0a] group-hover:text-[#2563eb] transition-colors">
-                      <FaExternalLinkAlt className="w-3.5 h-3.5" />
-                      Open full size
-                    </span>
-                  </a>
-                </div>
-              ) : (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-4 p-4 bg-white border border-[#eef2f6] rounded-lg hover:border-[#0a0a0a]/30 transition-colors"
-                >
-                  <div className="p-3 bg-[#fee2e2] rounded-xl text-[#dc2626]">
-                    <FaFilePdf className="w-6 h-6" />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">
+                  Attachment
+                </h3>
+                {canManageAttachments && (
+                  <div className="flex items-center gap-2">
+                    {/* ✅ Replace/Upload button */}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        disabled={isUploading}
+                      />
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#0a0a0a] bg-white border border-[#eef2f6] rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+                        <FaUpload className="w-3 h-3" />
+                        {isUploading ? 'Uploading...' : 'Replace'}
+                      </span>
+                    </label>
+                    {/* ✅ Delete button */}
+                    <button
+                      onClick={handleDeleteAttachment}
+                      disabled={isDeletingAttachment}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      <FaTrash className="w-3 h-3" />
+                      {isDeletingAttachment ? 'Deleting...' : 'Delete'}
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#0a0a0a] truncate">
-                      {task.fileAttachment}
-                    </p>
-                    <p className="text-xs text-[#94a3b8]">Click to open PDF in new tab</p>
-                  </div>
-                  <FaExternalLinkAlt className="w-4 h-4 text-[#94a3b8] flex-shrink-0" />
-                </a>
-              )}
+                )}
+              </div>
+              {renderFilePreview()}
+            </div>
+          )}
+
+          {/* ✅ Show upload option when no attachment */}
+          {!task.fileAttachment && canManageAttachments && (
+            <div className="bg-[#f8fafc] rounded-xl p-6 border-2 border-dashed border-[#e2e8f0]">
+              <div className="flex flex-col items-center justify-center py-4">
+                <FaUpload className="w-8 h-8 text-[#94a3b8] mb-2" />
+                <p className="text-sm text-[#64748b]">No attachment</p>
+                <label className="mt-2 cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    disabled={isUploading}
+                  />
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#0a0a0a] rounded-lg hover:bg-[#1a1a1a] transition-colors cursor-pointer">
+                    <FaUpload className="w-4 h-4" />
+                    {isUploading ? 'Uploading...' : 'Upload Attachment'}
+                  </span>
+                </label>
+                <p className="text-xs text-[#94a3b8] mt-2">PDF, JPG, PNG • Max 5MB</p>
+              </div>
             </div>
           )}
 

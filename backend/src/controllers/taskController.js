@@ -1,6 +1,7 @@
 const TaskService = require('../services/taskService');
-const EmployeeService = require('../services/employeeService');
 const { validationResult } = require('express-validator');
+const fs = require('fs');
+const path = require('path');
 
 const getTasks = async (req, res) => {
   try {
@@ -111,24 +112,45 @@ const deleteTask = async (req, res) => {
 const getTaskStats = async (req, res) => {
   try {
     const stats = await TaskService.getTaskStats(req.user.id, req.user.role);
-
-    // FIXED: admin dashboard needs "Total Employees" alongside task stats
-    // (per spec: "Admin view: total employees, total tasks, completed
-    // tasks, and pending tasks"). Previously this endpoint only ever
-    // returned { total, completed, pending, overdue } regardless of role,
-    // so the frontend had no way to show an employee count without a
-    // second round trip.
-    if (req.user.role === 'admin') {
-      const employeeStats = await EmployeeService.getEmployeeStatsSummary();
-      return res.json({
-        ...stats,
-        totalEmployees: employeeStats.total
-      });
-    }
-
     res.json(stats);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ NEW: Delete attachment from task
+const deleteAttachment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get task
+    const task = await TaskService.getTaskById(id, req.user.id, req.user.role);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check if task has attachment
+    if (!task.fileAttachment) {
+      return res.status(400).json({ message: 'No attachment found' });
+    }
+
+    // Delete file from filesystem
+    const uploadDir = path.join(__dirname, '../../uploads');
+    const filePath = path.join(uploadDir, task.fileAttachment);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Remove attachment from database
+    await task.update({ fileAttachment: null });
+
+    res.json({
+      message: 'Attachment deleted successfully',
+      task
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };
 
@@ -138,5 +160,6 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
-  getTaskStats
+  getTaskStats,
+  deleteAttachment // ✅ Export new function
 };

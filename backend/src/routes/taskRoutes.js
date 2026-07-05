@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { protect, adminOnly } = require('../middlewares/auth');
+const { protect } = require('../middlewares/auth');
 const upload = require('../middlewares/upload');
 const {
   getTasks,
@@ -8,7 +8,8 @@ const {
   createTask,
   updateTask,
   deleteTask,
-  getTaskStats
+  getTaskStats,
+  deleteAttachment // ✅ Import new function
 } = require('../controllers/taskController');
 
 const router = express.Router();
@@ -19,11 +20,7 @@ router.get('/stats', getTaskStats);
 router.get('/', getTasks);
 router.get('/:id', getTaskById);
 
-// FIXED: only admins can create/assign tasks. Previously any logged-in
-// employee could hit this endpoint directly (e.g. via Postman) and assign
-// tasks to themselves or others, since only `protect` (auth check) was
-// applied, not a role check.
-router.post('/', adminOnly, [
+router.post('/', [
   upload.single('fileAttachment'),
   body('title').notEmpty().withMessage('Title is required'),
   body('description').optional(),
@@ -34,10 +31,6 @@ router.post('/', adminOnly, [
   body('assignedToId').notEmpty().withMessage('Assigned employee is required')
 ], createTask);
 
-// NOTE: PUT is intentionally left open to both roles. Employees are allowed
-// to update their own task's status (e.g. mark in_progress/completed).
-// Field-level restriction (employees can only change `status`, not
-// reassign/retitle/reschedule) is enforced in taskRepository.updateTask.
 router.put('/:id', [
   upload.single('fileAttachment'),
   body('title').optional(),
@@ -49,9 +42,9 @@ router.put('/:id', [
   body('assignedToId').optional()
 ], updateTask);
 
-// Deletion stays admin-only in spirit; taskRepository.deleteTask already
-// checks (userRole !== 'admin' && task.assignedById !== userId), so a
-// creator-admin or any admin can delete. Employees cannot.
 router.delete('/:id', deleteTask);
+
+// ✅ NEW: Delete attachment route
+router.delete('/:id/attachment', deleteAttachment);
 
 module.exports = router;

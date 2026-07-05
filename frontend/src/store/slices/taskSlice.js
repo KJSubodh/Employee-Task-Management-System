@@ -37,11 +37,6 @@ export const createTask = createAsyncThunk(
         }
       });
       
-      // FIXED: don't manually set Content-Type here. Axios auto-detects
-      // FormData and sets 'multipart/form-data; boundary=...' itself.
-      // Hardcoding the header without a boundary produces a malformed
-      // multipart body that multer can't parse, so req.body fields come
-      // through empty -> express-validator rejects with 400.
       const response = await api.post('/tasks', formData);
       
       toast.success('Task created successfully');
@@ -65,8 +60,6 @@ export const updateTask = createAsyncThunk(
         }
       });
       
-      // FIXED: same issue as createTask - let axios set the multipart
-      // header (with boundary) automatically for FormData.
       const response = await api.put(`/tasks/${id}`, formData);
       
       toast.success('Task updated successfully');
@@ -88,6 +81,22 @@ export const deleteTask = createAsyncThunk(
       return id;
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to delete task';
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+// ✅ NEW: Delete attachment from task
+export const deleteAttachment = createAsyncThunk(
+  'tasks/deleteAttachment',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await api.delete(`/tasks/${id}/attachment`);
+      toast.success('Attachment deleted successfully');
+      return response.data;
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to delete attachment';
       toast.error(message);
       return rejectWithValue(message);
     }
@@ -153,6 +162,13 @@ const taskSlice = createSlice({
       .addCase(deleteTask.fulfilled, (state, action) => {
         state.tasks = state.tasks.filter(task => task.id !== action.payload);
         state.total -= 1;
+      })
+      // ✅ NEW: Handle delete attachment
+      .addCase(deleteAttachment.fulfilled, (state, action) => {
+        const index = state.tasks.findIndex(task => task.id === action.payload.task.id);
+        if (index !== -1) {
+          state.tasks[index] = action.payload.task;
+        }
       });
   }
 });

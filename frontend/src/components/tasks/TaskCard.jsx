@@ -1,6 +1,19 @@
 import React from 'react';
 import { FaEdit, FaTrash, FaCalendar, FaUser, FaFlag, FaPaperclip } from 'react-icons/fa';
-import { formatUTCDate } from '../../utils/dateUtils';
+import { format } from 'date-fns';
+
+// ✅ FIX: Proper date formatting without timezone issues
+const formatLocalDate = (dateStr, formatStr = 'MMM dd, yyyy') => {
+  if (!dateStr) return 'N/A';
+  try {
+    // If it's already a date string, parse it safely
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return 'N/A';
+    return format(date, formatStr);
+  } catch {
+    return 'N/A';
+  }
+};
 
 const TaskCard = ({ task, onEdit, onDelete, onView, userRole }) => {
   const getPriorityColor = (priority) => {
@@ -23,6 +36,17 @@ const TaskCard = ({ task, onEdit, onDelete, onView, userRole }) => {
   };
 
   const isOverdue = task.status !== 'completed' && new Date(task.dueDate) < new Date();
+
+  // ✅ FIX: Get the correct file URL
+  const getFileUrl = () => {
+    if (!task.fileAttachment) return null;
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    // Remove trailing slash if exists
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+    return `${cleanBaseUrl}/uploads/${task.fileAttachment}`;
+  };
+
+  const fileUrl = getFileUrl();
 
   return (
     <div
@@ -91,16 +115,16 @@ const TaskCard = ({ task, onEdit, onDelete, onView, userRole }) => {
         </div>
         <div className="flex items-center gap-2">
           <FaCalendar className="w-3.5 h-3.5 text-[#94a3b8]" />
-          <span>Due {formatUTCDate(task.dueDate, 'MMM dd, yyyy')}</span>
+          <span>Due {formatLocalDate(task.dueDate)}</span>
         </div>
       </div>
 
-      {/* Attachment Link */}
-      {task.fileAttachment && (
+      {/* ✅ FIXED: Attachment Link with proper URL */}
+      {task.fileAttachment && fileUrl && (
         <div className="mt-3 pt-3 border-t border-[#eef2f6]">
           <a
             onClick={(e) => e.stopPropagation()}
-            href={`${import.meta.env.VITE_API_URL}/uploads/${task.fileAttachment}`}
+            href={fileUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0a0a0a] hover:text-[#2563eb] transition-colors"
