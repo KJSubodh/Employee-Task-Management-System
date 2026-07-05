@@ -88,17 +88,28 @@ A full-stack task management system built for the Full Stack Developer Assignmen
 ```bash
 mysql -u root -p < schema.sql
 ```
-This creates the `task_management` database along with `Users`, `Tasks`, and `Notifications` tables, plus two working seed accounts:
-
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@example.com` | `Admin@123` |
-| Employee | `john@example.com` | `Employee@123` |
+This creates the `task_management` database along with `Users`, `Tasks`, and `Notifications` tables. **No accounts are seeded** — see "Creating the First Admin Account" below.
 
 > If you're upgrading an existing database created before the `startDate`/`dueDate` timezone fix, run the migration instead of (or in addition to) `schema.sql`:
 > ```bash
 > mysql -u root -p task_management < migrations/fix-task-dateonly-columns.sql
 > ```
+
+### Creating the First Admin Account
+
+Public registration (`POST /api/auth/register`) always creates an `employee` account — this is intentional, so nobody can self-register as Admin. To get your first Admin:
+
+1. **Register normally** through the app's Register page (or `POST /api/auth/register`) with your own name/email/password. This creates a properly bcrypt-hashed account the standard way — no manually-crafted hashes involved.
+2. **Promote that account to Admin** with a direct SQL update:
+   ```sql
+   USE task_management;
+   UPDATE Users SET role = 'admin' WHERE email = 'your-email@example.com';
+   ```
+3. Log out and log back in (or just log in fresh) — your JWT will now carry `role: admin`.
+
+Once you have one Admin, that Admin can create further Admins the same way (register as employee, then promote via SQL) or manage employees directly through the Employees page.
+
+This avoids ever having real (or fake) password hashes committed to the repo, and sidesteps the earlier bug where a placeholder bcrypt-shaped string was hardcoded into seed data instead of an actual hash.
 
 ### 2. Backend Setup
 ```bash
@@ -106,7 +117,7 @@ cd backend
 npm install
 ```
 
-Create a `.env` file in `backend/` (never commit this — see `.gitignore`):
+Create a `.env` file in `backend/` (or copy `.env.example`; never commit the real `.env` — see `.gitignore`):
 ```env
 PORT=5000
 NODE_ENV=development
@@ -149,30 +160,14 @@ cd frontend
 npm install
 ```
 
-Create a `.env` file in `frontend/`:
+Create a `.env` file in `frontend/` (or copy `.env.example`):
 ```env
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=http://localhost:5000/api
 ```
 
 Run the dev server:
 ```bash
 npm run dev
-```
-
-## Dev Tools
-
-### `generateToken.js`
-A standalone helper script for minting a test JWT without going through the `/login` flow — useful for hitting protected routes directly via curl/Postman while developing.
-
-```bash
-cd backend
-npm install jsonwebtoken dotenv   # if not already installed
-node generateToken.js --id=<real-user-uuid> --role=admin
-```
-
-Prints a signed token (using the app's real `JWT_SECRET`/`JWT_EXPIRE`) ready to paste into an `Authorization: Bearer <token>` header. The `id` must correspond to a real row in `Users` for downstream lookups (`req.user.id`) to resolve correctly — grab one with:
-```sql
-SELECT id, fullName, role FROM Users;
 ```
 
 ## API Endpoints
@@ -206,7 +201,6 @@ backend/
 ├── middlewares/       # auth (JWT), upload (Multer), role guards
 ├── routes/
 ├── migrations/
-├── generateToken.js   # Dev helper - see "Dev Tools" above
 └── schema.sql         # Hand-authored MySQL schema (source of truth)
 
 frontend/
@@ -223,7 +217,8 @@ frontend/
 ## Notes on Testing / Verification
 
 All core functionality listed in the assignment spec has been manually verified end-to-end, including:
-- Registration/login with password policy and duplicate-email validation, including both seed accounts (`admin@example.com` / `john@example.com`) logging in successfully with the credentials above
+- Registration/login with password policy and duplicate-email validation
+- Admin bootstrap flow (register → promote via SQL, see above) verified end-to-end
 - Role-based dashboard content and route access
 - Employee CRUD with search/sort/pagination
 - Task CRUD, including the Due Date ≥ Start Date rule and the completed-task edit lock
@@ -231,7 +226,7 @@ All core functionality listed in the assignment spec has been manually verified 
 - File attachment upload, size/type limits, and in-app preview
 - In-app notification creation on assign/complete/reassign
 - Report generation and export across JSON, Excel, CSV, and PDF, including in-app preview without requiring a download
-- Role-based access enforcement verified directly against the API using `generateToken.js`-issued tokens for both roles (e.g. confirming `POST /tasks` returns 403 for an employee token)
+- Role-based access enforcement verified directly against the API (e.g. confirming `POST /tasks` returns 403 for an employee token)
 
 Known follow-up items before this is considered fully production-ready: real email delivery for notifications, automated unit tests, and a Docker Compose setup for one-command local spin-up.
 
